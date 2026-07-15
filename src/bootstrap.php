@@ -56,7 +56,7 @@ loadEnv(PROJECT_ROOT . '/.env');
 date_default_timezone_set(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg');
 
 // Эти пути вычисляются автоматически. На обычном хостинге их не нужно указывать в .env.
-setRuntimeEnvDefault('MEDIA_STORAGE_PATH', PROJECT_ROOT . '/public/media');
+setRuntimeEnvDefault('MEDIA_STORAGE_PATH', PROJECT_ROOT . '/media');
 $appUrl = rtrim((string) env('APP_URL', ''), '/');
 if ($appUrl !== '') {
     setRuntimeEnvDefault('MEDIA_PUBLIC_URL', $appUrl . '/media');
