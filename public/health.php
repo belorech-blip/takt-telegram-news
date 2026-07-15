@@ -15,8 +15,6 @@ try {
         'DB_NAME',
         'DB_USER',
         'DB_PASSWORD',
-        'MEDIA_STORAGE_PATH',
-        'MEDIA_PUBLIC_URL',
     ];
 
     $missing = [];
@@ -26,18 +24,34 @@ try {
         }
     }
 
+    $mediaPath = requireEnv('MEDIA_STORAGE_PATH');
+    if (!is_dir($mediaPath)) {
+        @mkdir($mediaPath, 0775, true);
+    }
+    $mediaWritable = is_dir($mediaPath) && is_writable($mediaPath);
+
+    $logsPath = PROJECT_ROOT . '/storage/logs';
+    if (!is_dir($logsPath)) {
+        @mkdir($logsPath, 0775, true);
+    }
+    $logsWritable = is_dir($logsPath) && is_writable($logsPath);
+
+    $ok = $databaseOk && $missing === [] && $mediaWritable && $logsWritable;
+
     jsonResponse([
-        'ok' => $databaseOk && $missing === [],
+        'ok' => $ok,
         'php' => PHP_VERSION,
         'database' => $databaseOk ? 'ok' : 'error',
+        'media_directory' => $mediaWritable ? 'writable' : 'not_writable',
+        'logs_directory' => $logsWritable ? 'writable' : 'not_writable',
         'missing_config' => $missing,
         'time' => date(DATE_ATOM),
-    ], $databaseOk && $missing === [] ? 200 : 503);
+    ], $ok ? 200 : 503);
 } catch (Throwable $error) {
     appLog('error', 'Health check failed', ['error' => $error->getMessage()]);
     jsonResponse([
         'ok' => false,
         'database' => 'error',
-        'error' => 'Health check failed',
+        'error' => $error->getMessage(),
     ], 503);
 }
