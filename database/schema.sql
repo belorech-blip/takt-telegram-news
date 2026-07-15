@@ -11,6 +11,7 @@ CREATE TABLE news (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_news_telegram_message (telegram_channel_id, telegram_message_id),
+    UNIQUE KEY uq_news_media_group (telegram_channel_id, media_group_id),
     KEY idx_news_status_published (status, published_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -31,5 +32,6 @@ CREATE TABLE news_media (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_news_media_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_news_media_file (news_id, telegram_file_unique_id),
     KEY idx_news_media_news_sort (news_id, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
