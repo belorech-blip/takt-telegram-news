@@ -1,0 +1,9 @@
+Options -Indexes
+DirectoryIndex index.php
+
+<FilesMatch "^(\.env|\.env\.example|\.gitignore|README\.md)$">
+    Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteRule ^(?:src|storage|scripts|database)(?:/|$) - [F,L]
