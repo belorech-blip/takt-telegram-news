@@ -1,48 +1,98 @@
 # TAKT Telegram News
 
-Автоматическая публикация новостей из Telegram-канала `@razdvatakt` в блоке новостей на сайте Tilda.
+Готовый проект для автоматического переноса публикаций из Telegram-канала `@razdvatakt` в блок новостей на сайте Tilda.
 
-## Архитектура
+## Готовая структура
 
-1. Telegram отправляет новые публикации канала на webhook.
-2. PHP-приложение проверяет канал и сохраняет новость в MySQL.
-3. Фото и видео копируются в локальное хранилище на хостинге.
-4. Публичный JSON API отдаёт последние новости.
-5. HTML-блок Tilda получает API и формирует карточки со ссылкой на исходный пост в Telegram.
+```text
+takt-telegram-news/
+├── public/                 ← корневая директория сайта
+│   ├── api/
+│   │   └── news.php
+│   ├── media/              ← сюда автоматически сохраняются фото и видео
+│   ├── .htaccess
+│   ├── health.php
+│   ├── index.php
+│   └── webhook.php
+├── src/
+│   └── bootstrap.php
+├── storage/
+│   └── logs/
+├── scripts/
+│   └── set-webhook.php
+├── database/
+│   └── schema.sql
+├── .env.example
+├── .gitignore
+└── README.md
+```
+
+Ничего вручную переносить между папками не нужно. На сервер загружается вся папка проекта целиком.
+
+## Развёртывание на ISPmanager
+
+1. Загрузить всё содержимое репозитория в:
+
+```text
+/www/news.gktakt.ru/
+```
+
+2. Для сайта `news.gktakt.ru` указать корневую директорию:
+
+```text
+/www/news.gktakt.ru/public
+```
+
+3. Скопировать `.env.example` в `.env` и заполнить:
+
+- токен Telegram-бота;
+- секрет webhook;
+- имя базы данных;
+- пользователя базы;
+- пароль базы.
+
+Пути к медиа указывать не требуется. Проект автоматически использует:
+
+```text
+/www/news.gktakt.ru/public/media
+https://news.gktakt.ru/media
+```
+
+4. Создать MySQL-базу и импортировать файл:
+
+```text
+database/schema.sql
+```
+
+5. Проверить:
+
+```text
+https://news.gktakt.ru/health.php
+```
+
+6. Установить webhook через SSH:
+
+```bash
+php scripts/set-webhook.php
+```
+
+## Адреса
+
+```text
+https://news.gktakt.ru/health.php
+https://news.gktakt.ru/webhook.php
+https://news.gktakt.ru/api/news.php
+```
 
 ## Требования
 
 - PHP 8.2+
 - MySQL 8+ или MariaDB 10.5+
-- HTTPS-домен для webhook
+- HTTPS
 - PHP extensions: `curl`, `pdo_mysql`, `json`, `mbstring`, `fileinfo`
-- FFmpeg — опционально, для постеров видео
 
 ## Безопасность
 
-- Секреты хранятся только в `.env` на сервере.
-- `.env` не коммитится в GitHub.
-- Telegram-токен никогда не должен попадать в исходный код или публичный репозиторий.
-- Webhook проверяет секретный заголовок Telegram и username/ID канала.
-
-## Текущие точки входа
-
-- `public/webhook.php` — принимает `channel_post` и `edited_channel_post`.
-- `public/api/news.php` — публичный JSON API новостей.
-- `public/health.php` — проверка конфигурации и подключения к БД.
-- `scripts/set-webhook.php` — установка webhook из командной строки.
-- `database/schema.sql` — структура MySQL.
-
-## План
-
-- [x] Создать репозиторий
-- [x] Создать Telegram-бота
-- [x] Добавить бота администратором в канал
-- [x] Подготовить базовый backend-код
-- [ ] Создать поддомен с HTTPS
-- [ ] Подготовить БД
-- [ ] Развернуть webhook
-- [ ] Проверить получение тестового поста
-- [ ] Доработать копирование и превью видео
-- [ ] Сделать блок T123 для Tilda
-- [ ] Импортировать существующие публикации
+- `.env` не хранится в GitHub.
+- Токен Telegram-бота не должен попадать в исходный код.
+- Корнем сайта обязательно должна быть папка `public`.
