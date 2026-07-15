@@ -42,8 +42,25 @@ function env(string $key, ?string $default = null): ?string
     return $value === false ? $default : $value;
 }
 
+function setRuntimeEnvDefault(string $key, string $value): void
+{
+    if (trim((string) env($key, '')) !== '') {
+        return;
+    }
+
+    putenv($key . '=' . $value);
+    $_ENV[$key] = $value;
+}
+
 loadEnv(PROJECT_ROOT . '/.env');
 date_default_timezone_set(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg');
+
+// Эти пути вычисляются автоматически. На обычном хостинге их не нужно указывать в .env.
+setRuntimeEnvDefault('MEDIA_STORAGE_PATH', PROJECT_ROOT . '/public/media');
+$appUrl = rtrim((string) env('APP_URL', ''), '/');
+if ($appUrl !== '') {
+    setRuntimeEnvDefault('MEDIA_PUBLIC_URL', $appUrl . '/media');
+}
 
 function requireEnv(string $key): string
 {
