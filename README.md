@@ -2,18 +2,13 @@
 
 Готовый проект для автоматического переноса публикаций из Telegram-канала `@razdvatakt` в блок новостей на сайте Tilda.
 
-## Готовая структура
+## Структура для ISPmanager
 
 ```text
 takt-telegram-news/
-├── public/                 ← корневая директория сайта
-│   ├── api/
-│   │   └── news.php
-│   ├── media/              ← сюда автоматически сохраняются фото и видео
-│   ├── .htaccess
-│   ├── health.php
-│   ├── index.php
-│   └── webhook.php
+├── api/
+│   └── news.php
+├── media/                  ← сюда автоматически сохраняются фото и видео
 ├── src/
 │   └── bootstrap.php
 ├── storage/
@@ -22,14 +17,24 @@ takt-telegram-news/
 │   └── set-webhook.php
 ├── database/
 │   └── schema.sql
+├── .htaccess
 ├── .env.example
 ├── .gitignore
+├── health.php
+├── index.php
+├── webhook.php
 └── README.md
 ```
 
-Ничего вручную переносить между папками не нужно. На сервер загружается вся папка проекта целиком.
+Проект рассчитан на стандартную корневую директорию ISPmanager:
 
-## Развёртывание на ISPmanager
+```text
+/www/news.gktakt.ru/
+```
+
+Корневую директорию сайта в панели менять не требуется. Всё содержимое репозитория загружается непосредственно в `/www/news.gktakt.ru/`.
+
+## Развёртывание
 
 1. Загрузить всё содержимое репозитория в:
 
@@ -37,13 +42,7 @@ takt-telegram-news/
 /www/news.gktakt.ru/
 ```
 
-2. Для сайта `news.gktakt.ru` указать корневую директорию:
-
-```text
-/www/news.gktakt.ru/public
-```
-
-3. Скопировать `.env.example` в `.env` и заполнить:
+2. Скопировать `.env.example` в `.env` и заполнить:
 
 - токен Telegram-бота;
 - секрет webhook;
@@ -54,23 +53,23 @@ takt-telegram-news/
 Пути к медиа указывать не требуется. Проект автоматически использует:
 
 ```text
-/www/news.gktakt.ru/public/media
+/www/news.gktakt.ru/media
 https://news.gktakt.ru/media
 ```
 
-4. Создать MySQL-базу и импортировать файл:
+3. Создать MySQL-базу и импортировать:
 
 ```text
 database/schema.sql
 ```
 
-5. Проверить:
+4. Проверить:
 
 ```text
 https://news.gktakt.ru/health.php
 ```
 
-6. Установить webhook через SSH:
+5. Установить webhook через SSH:
 
 ```bash
 php scripts/set-webhook.php
@@ -95,4 +94,4 @@ https://news.gktakt.ru/api/news.php
 
 - `.env` не хранится в GitHub.
 - Токен Telegram-бота не должен попадать в исходный код.
-- Корнем сайта обязательно должна быть папка `public`.
+- `.htaccess` запрещает доступ к `src`, `storage`, `scripts`, `database` и конфигурационным файлам.
