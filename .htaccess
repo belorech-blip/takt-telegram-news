@@ -1,9 +1,12 @@
 Options -Indexes
 DirectoryIndex index.php
 
-<FilesMatch "^(\.env|\.env\.example|\.gitignore|README\.md)$">
+# Закрываем секретные и служебные файлы.
+<FilesMatch "^(\.env(?:\..*)?|\.gitignore|README\.md)$">
     Require all denied
 </FilesMatch>
 
 RewriteEngine On
-RewriteRule ^(?:src|storage|scripts|database)(?:/|$) - [F,L]
+
+# Публично доступны только index.php, health.php, webhook.php, api/ и media/.
+RewriteRule ^(?:\.git|\.github|src|storage|scripts|database)(?:/|$) - [F,L,NC]
