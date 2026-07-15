@@ -5,8 +5,8 @@
 /vendor/
 /node_modules/
 
-/storage/media/*
-!/storage/media/.gitkeep
+/public/media/*
+!/public/media/.gitkeep
 /storage/logs/*
 !/storage/logs/.gitkeep
 
