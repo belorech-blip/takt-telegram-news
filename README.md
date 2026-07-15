@@ -29,17 +29,17 @@ takt-telegram-news/
 Проект рассчитан на стандартную корневую директорию ISPmanager:
 
 ```text
-/www/news.gktakt.ru/
+/www/new.devtakt.ru/
 ```
 
-Корневую директорию сайта в панели менять не требуется. Всё содержимое репозитория загружается непосредственно в `/www/news.gktakt.ru/`.
+Корневую директорию сайта в панели менять не требуется. Всё содержимое репозитория загружается непосредственно в `/www/new.devtakt.ru/`.
 
 ## Развёртывание
 
 1. Загрузить всё содержимое репозитория в:
 
 ```text
-/www/news.gktakt.ru/
+/www/new.devtakt.ru/
 ```
 
 2. Скопировать `.env.example` в `.env` и заполнить:
@@ -53,8 +53,8 @@ takt-telegram-news/
 Пути к медиа указывать не требуется. Проект автоматически использует:
 
 ```text
-/www/news.gktakt.ru/media
-https://news.gktakt.ru/media
+/www/new.devtakt.ru/media
+https://new.devtakt.ru/media
 ```
 
 3. Создать MySQL-базу и импортировать:
@@ -66,7 +66,7 @@ database/schema.sql
 4. Проверить:
 
 ```text
-https://news.gktakt.ru/health.php
+https://new.devtakt.ru/health.php
 ```
 
 5. Установить webhook через SSH:
@@ -78,9 +78,9 @@ php scripts/set-webhook.php
 ## Адреса
 
 ```text
-https://news.gktakt.ru/health.php
-https://news.gktakt.ru/webhook.php
-https://news.gktakt.ru/api/news.php
+https://new.devtakt.ru/health.php
+https://new.devtakt.ru/webhook.php
+https://new.devtakt.ru/api/news.php
 ```
 
 ## Требования
