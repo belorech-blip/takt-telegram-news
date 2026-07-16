@@ -12,18 +12,28 @@ if (PHP_SAPI !== 'cli') {
 try {
     $webhookUrl = rtrim(requireEnv('APP_URL'), '/') . '/webhook.php';
     $apiUrl = 'https://api.telegram.org/bot' . requireEnv('TELEGRAM_BOT_TOKEN') . '/setWebhook';
+    $webhookIp = trim((string) env('TELEGRAM_WEBHOOK_IP', ''));
+
+    $payload = [
+        'url' => $webhookUrl,
+        'secret_token' => requireEnv('TELEGRAM_WEBHOOK_SECRET'),
+        'allowed_updates' => json_encode(['channel_post', 'edited_channel_post'], JSON_THROW_ON_ERROR),
+        'drop_pending_updates' => 'false',
+        'max_connections' => 1,
+    ];
+
+    if ($webhookIp !== '') {
+        if (filter_var($webhookIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            throw new RuntimeException('TELEGRAM_WEBHOOK_IP должен содержать корректный IPv4-адрес');
+        }
+        $payload['ip_address'] = $webhookIp;
+    }
 
     $ch = curl_init($apiUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => http_build_query([
-            'url' => $webhookUrl,
-            'secret_token' => requireEnv('TELEGRAM_WEBHOOK_SECRET'),
-            'allowed_updates' => json_encode(['channel_post', 'edited_channel_post'], JSON_THROW_ON_ERROR),
-            'drop_pending_updates' => 'false',
-            'max_connections' => 1,
-        ]),
+        CURLOPT_POSTFIELDS => http_build_query($payload),
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT => 60,
         CURLOPT_SSL_VERIFYPEER => true,
@@ -44,6 +54,7 @@ try {
     }
 
     echo "Webhook установлен: {$webhookUrl}" . PHP_EOL;
+    echo 'IP доставки: ' . ($webhookIp !== '' ? $webhookIp : 'DNS') . PHP_EOL;
     echo "Параллельные соединения: 1 (безопасно для галерей)" . PHP_EOL;
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . PHP_EOL;
 } catch (Throwable $error) {
