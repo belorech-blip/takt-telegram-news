@@ -21,7 +21,7 @@ CREATE TABLE news_media (
     telegram_file_id VARCHAR(255) NULL,
     telegram_file_unique_id VARCHAR(255) NULL,
     media_type ENUM('image','video','animation','document') NOT NULL,
-    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    sort_order INT UNSIGNED NOT NULL DEFAULT 0,
     original_filename VARCHAR(255) NULL,
     mime_type VARCHAR(150) NULL,
     file_size BIGINT UNSIGNED NULL,
