@@ -90,15 +90,11 @@ try {
 
 function applyCors(): void
 {
-    $origin = (string) ($_SERVER['HTTP_ORIGIN'] ?? '');
-    $allowed = array_values(array_filter(array_map('trim', explode(',', (string) env('CORS_ALLOWED_ORIGINS', '')))));
-
-    if ($origin !== '' && in_array($origin, $allowed, true)) {
-        header('Access-Control-Allow-Origin: ' . $origin);
-        header('Vary: Origin');
-        header('Access-Control-Allow-Methods: GET, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type');
-    }
+    // API содержит только публичные новости и не использует cookies/авторизацию.
+    // Открытый CORS нужен для опубликованного сайта и предпросмотра Tilda.
+    header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Methods: GET, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type');
 }
 
 function excerptFromBody(string $body): string
