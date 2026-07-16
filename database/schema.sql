@@ -1,8 +1,12 @@
 CREATE TABLE news (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    telegram_channel_id BIGINT NOT NULL,
-    telegram_message_id BIGINT NOT NULL,
-    telegram_post_url VARCHAR(500) NOT NULL,
+    source VARCHAR(20) NOT NULL DEFAULT 'telegram',
+    source_owner_id BIGINT NULL,
+    source_post_id BIGINT NULL,
+    source_url VARCHAR(500) NULL,
+    telegram_channel_id BIGINT NULL,
+    telegram_message_id BIGINT NULL,
+    telegram_post_url VARCHAR(500) NULL,
     media_group_id VARCHAR(100) NULL,
     title VARCHAR(255) NOT NULL,
     body TEXT NULL,
@@ -10,6 +14,7 @@ CREATE TABLE news (
     status ENUM('processing','published','hidden','error','deleted') NOT NULL DEFAULT 'processing',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_news_source_post (source, source_owner_id, source_post_id),
     UNIQUE KEY uq_news_telegram_message (telegram_channel_id, telegram_message_id),
     UNIQUE KEY uq_news_media_group (telegram_channel_id, media_group_id),
     KEY idx_news_status_published (status, published_at)
@@ -18,6 +23,8 @@ CREATE TABLE news (
 CREATE TABLE news_media (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     news_id BIGINT UNSIGNED NOT NULL,
+    source_media_id VARCHAR(255) NULL,
+    source_remote_url VARCHAR(1500) NULL,
     telegram_file_id VARCHAR(255) NULL,
     telegram_file_unique_id VARCHAR(255) NULL,
     media_type ENUM('image','video','animation','document') NOT NULL,
@@ -32,6 +39,7 @@ CREATE TABLE news_media (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_news_media_news FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_news_media_source (news_id, source_media_id),
     UNIQUE KEY uq_news_media_file (news_id, telegram_file_unique_id),
     KEY idx_news_media_news_sort (news_id, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
