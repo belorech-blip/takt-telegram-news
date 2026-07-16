@@ -108,7 +108,8 @@ try {
     $downloadErrors = [];
     foreach ($mediaItems as $index => $media) {
         try {
-            saveMedia($newsId, $media, $publishedAt, $index);
+            $sortOrder = $mediaGroupId !== null ? $messageId : $index;
+            saveMedia($newsId, $media, $publishedAt, $sortOrder);
         } catch (Throwable $mediaError) {
             $downloadErrors[] = $mediaError->getMessage();
             appLog('error', 'Media download failed', [
@@ -131,6 +132,7 @@ try {
         'update_id' => $update['update_id'] ?? null,
         'news_id' => $newsId,
         'message_id' => $messageId,
+        'media_group_id' => $mediaGroupId,
         'media_count' => count($mediaItems),
         'errors' => $downloadErrors,
     ]);
@@ -162,12 +164,14 @@ function extractMediaItems(array $post): array
             'file_size' => isset($photo['file_size']) ? (int) $photo['file_size'] : null,
             'mime_type' => 'image/jpeg',
             'file_name' => null,
+            'thumbnail_file_id' => null,
         ]];
     }
 
     foreach (['video', 'animation', 'document'] as $type) {
         if (!empty($post[$type]) && is_array($post[$type])) {
             $item = $post[$type];
+            $thumbnail = $item['thumbnail'] ?? $item['thumb'] ?? null;
             return [[
                 '_type' => $type === 'video' ? 'video' : $type,
                 'file_id' => (string) ($item['file_id'] ?? ''),
@@ -175,6 +179,7 @@ function extractMediaItems(array $post): array
                 'file_size' => isset($item['file_size']) ? (int) $item['file_size'] : null,
                 'mime_type' => (string) ($item['mime_type'] ?? ''),
                 'file_name' => isset($item['file_name']) ? (string) $item['file_name'] : null,
+                'thumbnail_file_id' => is_array($thumbnail) ? (string) ($thumbnail['file_id'] ?? '') : null,
             ]];
         }
     }
@@ -209,26 +214,38 @@ function saveMedia(int $newsId, array $media, string $publishedAt, int $sortOrde
     }
 
     $publicUrl = publicMediaUrl($relativePath);
+    $previewUrl = null;
+    $thumbnailFileId = trim((string) ($media['thumbnail_file_id'] ?? ''));
+    if ($thumbnailFileId !== '') {
+        $previewRelativePath = date('Y/m', strtotime($publishedAt)) . '/' . $safeId . '-preview.jpg';
+        $previewDestination = $storageRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $previewRelativePath);
+        if (!is_file($previewDestination) || filesize($previewDestination) === 0) {
+            downloadTelegramFile($thumbnailFileId, $previewDestination);
+        }
+        $previewUrl = publicMediaUrl($previewRelativePath);
+    }
+
     $mediaType = in_array($media['_type'], ['image', 'video', 'animation', 'document'], true) ? $media['_type'] : 'document';
 
     if ($row) {
         $statement = $pdo->prepare(
-            "UPDATE news_media SET telegram_file_id = :file_id, media_type = :media_type, sort_order = :sort_order, original_filename = :filename, mime_type = :mime_type, file_size = :file_size, storage_path = :storage_path, public_url = :public_url, status = 'ready' WHERE id = :id"
+            "UPDATE news_media SET telegram_file_id = :file_id, media_type = :media_type, sort_order = :sort_order, original_filename = :filename, mime_type = :mime_type, file_size = :file_size, storage_path = :storage_path, public_url = :public_url, preview_url = :preview_url, status = 'ready' WHERE id = :id"
         );
         $statement->execute([
             'file_id' => $fileId,
             'media_type' => $mediaType,
             'sort_order' => $sortOrder,
-            'filename' => $media['file_name'],
-            'mime_type' => $media['mime_type'],
+            'filename' => $media['file_name'] ?? null,
+            'mime_type' => $media['mime_type'] ?? null,
             'file_size' => $media['file_size'] ?? filesize($destination),
             'storage_path' => $destination,
             'public_url' => $publicUrl,
+            'preview_url' => $previewUrl,
             'id' => $row['id'],
         ]);
     } else {
         $statement = $pdo->prepare(
-            "INSERT INTO news_media (news_id, telegram_file_id, telegram_file_unique_id, media_type, sort_order, original_filename, mime_type, file_size, storage_path, public_url, status) VALUES (:news_id, :file_id, :file_unique_id, :media_type, :sort_order, :filename, :mime_type, :file_size, :storage_path, :public_url, 'ready')"
+            "INSERT INTO news_media (news_id, telegram_file_id, telegram_file_unique_id, media_type, sort_order, original_filename, mime_type, file_size, storage_path, public_url, preview_url, status) VALUES (:news_id, :file_id, :file_unique_id, :media_type, :sort_order, :filename, :mime_type, :file_size, :storage_path, :public_url, :preview_url, 'ready')"
         );
         $statement->execute([
             'news_id' => $newsId,
@@ -236,11 +253,12 @@ function saveMedia(int $newsId, array $media, string $publishedAt, int $sortOrde
             'file_unique_id' => $fileUniqueId,
             'media_type' => $mediaType,
             'sort_order' => $sortOrder,
-            'filename' => $media['file_name'],
-            'mime_type' => $media['mime_type'],
+            'filename' => $media['file_name'] ?? null,
+            'mime_type' => $media['mime_type'] ?? null,
             'file_size' => $media['file_size'] ?? filesize($destination),
             'storage_path' => $destination,
             'public_url' => $publicUrl,
+            'preview_url' => $previewUrl,
         ]);
     }
 }
