@@ -21,8 +21,13 @@ try {
     $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : $defaultLimit;
     $limit = max(1, min($limit, $maxLimit));
 
+    $hasSourceColumns = newsHasSourceColumns();
+    $sourceSelect = $hasSourceColumns
+        ? "source, COALESCE(source_url, telegram_post_url) AS post_url"
+        : "'telegram' AS source, telegram_post_url AS post_url";
+
     $statement = db()->prepare(
-        "SELECT id, title, body, telegram_post_url, published_at
+        "SELECT id, title, body, {$sourceSelect}, published_at
          FROM news
          WHERE status = 'published'
          ORDER BY published_at DESC, id DESC
@@ -64,13 +69,17 @@ try {
             $row['published_at'],
             new DateTimeZone(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg')
         );
+        $sourceUrl = (string) ($row['post_url'] ?? '');
 
         $items[] = [
             'id' => $newsId,
+            'source' => (string) ($row['source'] ?? 'telegram'),
             'title' => $row['title'],
             'excerpt' => excerptFromBody((string) ($row['body'] ?? '')),
             'published_at' => $date->format(DATE_ATOM),
-            'telegram_url' => $row['telegram_post_url'],
+            'source_url' => $sourceUrl,
+            // Оставлено для обратной совместимости со старым блоком Tilda.
+            'telegram_url' => $sourceUrl,
             'media_type' => aggregateMediaType($media),
             'primary_media' => $media[0] ?? null,
             'media' => $media,
@@ -88,10 +97,21 @@ try {
     jsonResponse(['ok' => false, 'error' => 'News API unavailable'], 500);
 }
 
+function newsHasSourceColumns(): bool
+{
+    try {
+        $statement = db()->prepare(
+            'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = \'news\' AND COLUMN_NAME = \'source_url\''
+        );
+        $statement->execute(['schema' => requireEnv('DB_NAME')]);
+        return (int) $statement->fetchColumn() > 0;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
 function applyCors(): void
 {
-    // API содержит только публичные новости и не использует cookies/авторизацию.
-    // Открытый CORS нужен для опубликованного сайта и предпросмотра Tilda.
     header('Access-Control-Allow-Origin: *');
     header('Access-Control-Allow-Methods: GET, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type');
