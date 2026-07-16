@@ -21,47 +21,59 @@ try {
     $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : $defaultLimit;
     $limit = max(1, min($limit, $maxLimit));
 
-    $sql = "
-        SELECT
-            n.id,
-            n.title,
-            n.body,
-            n.telegram_post_url,
-            n.published_at,
-            m.media_type,
-            m.public_url AS media_url,
-            m.preview_url
-        FROM news n
-        LEFT JOIN news_media m ON m.id = (
-            SELECT nm.id
-            FROM news_media nm
-            WHERE nm.news_id = n.id AND nm.status = 'ready'
-            ORDER BY nm.sort_order ASC, nm.id ASC
-            LIMIT 1
-        )
-        WHERE n.status = 'published'
-        ORDER BY n.published_at DESC, n.id DESC
-        LIMIT :limit
-    ";
-
-    $statement = db()->prepare($sql);
+    $statement = db()->prepare(
+        "SELECT id, title, body, telegram_post_url, published_at
+         FROM news
+         WHERE status = 'published'
+         ORDER BY published_at DESC, id DESC
+         LIMIT :limit"
+    );
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->execute();
+    $newsRows = $statement->fetchAll();
+
+    $mediaByNewsId = [];
+    if ($newsRows !== []) {
+        $ids = array_map(static fn(array $row): int => (int) $row['id'], $newsRows);
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $mediaStatement = db()->prepare(
+            "SELECT news_id, media_type, public_url, preview_url, mime_type, file_size, sort_order
+             FROM news_media
+             WHERE status = 'ready' AND news_id IN ({$placeholders})
+             ORDER BY news_id ASC, sort_order ASC, id ASC"
+        );
+        $mediaStatement->execute($ids);
+
+        foreach ($mediaStatement->fetchAll() as $mediaRow) {
+            $newsId = (int) $mediaRow['news_id'];
+            $mediaByNewsId[$newsId][] = [
+                'type' => $mediaRow['media_type'],
+                'url' => $mediaRow['public_url'],
+                'preview_url' => $mediaRow['preview_url'],
+                'mime_type' => $mediaRow['mime_type'],
+                'file_size' => $mediaRow['file_size'] !== null ? (int) $mediaRow['file_size'] : null,
+            ];
+        }
+    }
 
     $items = [];
-    foreach ($statement->fetchAll() as $row) {
-        $date = new DateTimeImmutable($row['published_at'], new DateTimeZone(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg'));
+    foreach ($newsRows as $row) {
+        $newsId = (int) $row['id'];
+        $media = $mediaByNewsId[$newsId] ?? [];
+        $date = new DateTimeImmutable(
+            $row['published_at'],
+            new DateTimeZone(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg')
+        );
+
         $items[] = [
-            'id' => (int) $row['id'],
+            'id' => $newsId,
             'title' => $row['title'],
             'excerpt' => excerptFromBody((string) ($row['body'] ?? '')),
             'published_at' => $date->format(DATE_ATOM),
             'telegram_url' => $row['telegram_post_url'],
-            'media' => $row['media_url'] ? [
-                'type' => $row['media_type'],
-                'url' => $row['media_url'],
-                'preview_url' => $row['preview_url'],
-            ] : null,
+            'media_type' => aggregateMediaType($media),
+            'primary_media' => $media[0] ?? null,
+            'media' => $media,
         ];
     }
 
@@ -97,4 +109,18 @@ function excerptFromBody(string $body): string
     }
 
     return mb_strlen($body) > 180 ? rtrim(mb_substr($body, 0, 177)) . '…' : $body;
+}
+
+function aggregateMediaType(array $media): string
+{
+    if ($media === []) {
+        return 'none';
+    }
+
+    if (count($media) === 1) {
+        return (string) $media[0]['type'];
+    }
+
+    $types = array_values(array_unique(array_map(static fn(array $item): string => (string) $item['type'], $media)));
+    return count($types) === 1 ? 'gallery' : 'mixed';
 }
