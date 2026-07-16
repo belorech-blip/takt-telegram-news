@@ -2,6 +2,13 @@
 
 Готовый проект для автоматического переноса публикаций из Telegram-канала `@razdvatakt` в блок новостей на сайте Tilda.
 
+Поддерживаются:
+
+- одна фотография;
+- одно видео;
+- галерея фотографий;
+- смешанная галерея из фотографий и видео.
+
 ## Структура для ISPmanager
 
 ```text
@@ -14,8 +21,11 @@ takt-telegram-news/
 ├── storage/
 │   └── logs/
 ├── scripts/
+│   ├── import-public-channel.php
+│   ├── migrate.php
 │   └── set-webhook.php
 ├── database/
+│   ├── migrations/
 │   └── schema.sql
 ├── .htaccess
 ├── .env.example
@@ -42,20 +52,7 @@ takt-telegram-news/
 /www/new.devtakt.ru/
 ```
 
-2. Скопировать `.env.example` в `.env` и заполнить:
-
-- токен Telegram-бота;
-- секрет webhook;
-- имя базы данных;
-- пользователя базы;
-- пароль базы.
-
-Пути к медиа указывать не требуется. Проект автоматически использует:
-
-```text
-/www/new.devtakt.ru/media
-https://new.devtakt.ru/media
-```
+2. Скопировать `.env.example` в `.env` и заполнить токен Telegram-бота, секрет webhook и доступы к базе.
 
 3. Создать MySQL-базу и импортировать:
 
@@ -69,26 +66,51 @@ database/schema.sql
 https://new.devtakt.ru/health.php
 ```
 
-5. Установить webhook через SSH:
+5. Установить webhook:
 
 ```bash
 php scripts/set-webhook.php
 ```
 
-## Адреса
+Webhook использует одно параллельное соединение, чтобы элементы одного Telegram-альбома сохранялись в правильном порядке.
+
+## Обновление существующей установки
+
+```bash
+git pull origin main
+php scripts/migrate.php
+php scripts/set-webhook.php
+```
+
+## Импорт последних старых публикаций
+
+Например, последние три публикации публичного канала:
+
+```bash
+php scripts/import-public-channel.php 3
+```
+
+Импортёр копирует доступные фотографии и видео с публичной страницы Telegram на собственный хостинг. Его можно запускать повторно: существующие записи обновятся без создания дублей.
+
+## API
 
 ```text
-https://new.devtakt.ru/health.php
-https://new.devtakt.ru/webhook.php
 https://new.devtakt.ru/api/news.php
+https://new.devtakt.ru/api/news.php?limit=3
 ```
+
+Каждая новость содержит:
+
+- `media_type`: `none`, `image`, `video`, `gallery` или `mixed`;
+- `primary_media`: первое медиа для обложки карточки;
+- `media`: полный массив фотографий и видео.
 
 ## Требования
 
 - PHP 8.2+
 - MySQL 8+ или MariaDB 10.5+
 - HTTPS
-- PHP extensions: `curl`, `pdo_mysql`, `json`, `mbstring`, `fileinfo`
+- PHP extensions: `curl`, `pdo_mysql`, `json`, `mbstring`, `fileinfo`, `dom`
 
 ## Безопасность
 
