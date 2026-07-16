@@ -22,6 +22,7 @@ try {
             'secret_token' => requireEnv('TELEGRAM_WEBHOOK_SECRET'),
             'allowed_updates' => json_encode(['channel_post', 'edited_channel_post'], JSON_THROW_ON_ERROR),
             'drop_pending_updates' => 'false',
+            'max_connections' => 1,
         ]),
         CURLOPT_CONNECTTIMEOUT => 10,
         CURLOPT_TIMEOUT => 60,
@@ -43,6 +44,7 @@ try {
     }
 
     echo "Webhook установлен: {$webhookUrl}" . PHP_EOL;
+    echo "Параллельные соединения: 1 (безопасно для галерей)" . PHP_EOL;
     echo json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . PHP_EOL;
 } catch (Throwable $error) {
     fwrite(STDERR, 'Ошибка: ' . $error->getMessage() . PHP_EOL);
