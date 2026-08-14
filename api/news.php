@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require __DIR__ . '/../src/bootstrap.php';
+require __DIR__ . '/../src/vk-service.php';
 
 try {
     applyCors();
@@ -21,22 +21,70 @@ try {
     $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : $defaultLimit;
     $limit = max(1, min($limit, $maxLimit));
 
+    // Перед выдачей блока сверяемся с самой стеной VK. Синхронизация троттлится,
+    // поэтому обычные просмотры страницы не создают лишних запросов к VK.
+    $syncInfo = null;
+    if (vkServiceConfigured()) {
+        try {
+            $syncInfo = syncVkLatestThrottled(max(3, $limit), 60);
+        } catch (Throwable $syncError) {
+            // Если VK временно недоступен, сайт продолжает показывать последний успешный снимок.
+            appLog('warning', 'VK live sync before API response failed', ['error' => $syncError->getMessage()]);
+            $syncInfo = ['configured' => true, 'error' => $syncError->getMessage()];
+        }
+    }
+
     $hasSourceColumns = newsHasSourceColumns();
     $sourceSelect = $hasSourceColumns
-        ? "source, COALESCE(source_url, telegram_post_url) AS post_url"
-        : "'telegram' AS source, telegram_post_url AS post_url";
+        ? "source, COALESCE(source_url, telegram_post_url) AS post_url, source_owner_id, source_post_id"
+        : "'telegram' AS source, telegram_post_url AS post_url, NULL AS source_owner_id, NULL AS source_post_id";
 
-    // После перехода проекта на VK не отдаём старые Telegram-записи в Tilda.
-    // Это исключает карточки, которые продолжают вести на t.me.
-    $sourceWhere = $hasSourceColumns ? " AND source = 'vk'" : " AND 1 = 0";
+    $where = "status = 'published'";
+    $bindings = [];
+
+    if ($hasSourceColumns) {
+        $where .= " AND source = 'vk'";
+
+        $latestState = readVkLatestState();
+        $latestIds = array_values(array_filter(array_map('intval', (array) ($latestState['post_ids'] ?? [])), static fn(int $id): bool => $id > 0));
+        $latestOwnerId = (int) ($latestState['owner_id'] ?? 0);
+
+        if ($latestOwnerId !== 0 && $latestIds !== []) {
+            $where .= ' AND source_owner_id = :latest_owner_id';
+            $bindings[':latest_owner_id'] = $latestOwnerId;
+
+            $postPlaceholders = [];
+            foreach ($latestIds as $index => $postId) {
+                $placeholder = ':latest_post_' . $index;
+                $postPlaceholders[] = $placeholder;
+                $bindings[$placeholder] = $postId;
+            }
+            $where .= ' AND source_post_id IN (' . implode(',', $postPlaceholders) . ')';
+        } else {
+            // Не показываем старые неудачные HTML-импорты без реального контента.
+            $where .= " AND NOT (
+                TRIM(COALESCE(title, '')) = 'Новость компании'
+                AND TRIM(COALESCE(body, '')) = 'Новость компании'
+                AND NOT EXISTS (
+                    SELECT 1 FROM news_media nm_bad WHERE nm_bad.news_id = news.id AND nm_bad.status = 'ready'
+                )
+            )";
+        }
+    } else {
+        $where .= ' AND 1 = 0';
+    }
 
     $statement = db()->prepare(
         "SELECT id, title, body, {$sourceSelect}, published_at
          FROM news
-         WHERE status = 'published'{$sourceWhere}
+         WHERE {$where}
          ORDER BY published_at DESC, id DESC
          LIMIT :limit"
     );
+
+    foreach ($bindings as $placeholder => $value) {
+        $statement->bindValue($placeholder, $value, PDO::PARAM_INT);
+    }
     $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->execute();
     $newsRows = $statement->fetchAll();
@@ -78,12 +126,12 @@ try {
         $items[] = [
             'id' => $newsId,
             'source' => (string) ($row['source'] ?? 'vk'),
+            'source_post_id' => isset($row['source_post_id']) ? (int) $row['source_post_id'] : null,
             'title' => $row['title'],
             'excerpt' => excerptFromBody((string) ($row['body'] ?? '')),
             'published_at' => $date->format(DATE_ATOM),
             'source_url' => $sourceUrl,
-            // Совместимость со старым Tilda-блоком: поле названо telegram_url,
-            // но для VK содержит тот же URL исходного поста VK.
+            // Оставляем старое поле только для совместимости с уже опубликованным Tilda-блоком.
             'telegram_url' => $sourceUrl,
             'media_type' => aggregateMediaType($media),
             'primary_media' => $media[0] ?? null,
@@ -91,10 +139,12 @@ try {
         ];
     }
 
-    header('Cache-Control: public, max-age=60, stale-while-revalidate=300');
+    header('Cache-Control: public, max-age=30, stale-while-revalidate=120');
     jsonResponse([
         'ok' => true,
         'count' => count($items),
+        'source' => 'vk',
+        'live_sync_configured' => vkServiceConfigured(),
         'items' => $items,
     ]);
 } catch (Throwable $error) {
