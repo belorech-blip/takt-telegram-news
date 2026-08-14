@@ -26,10 +26,14 @@ try {
         ? "source, COALESCE(source_url, telegram_post_url) AS post_url"
         : "'telegram' AS source, telegram_post_url AS post_url";
 
+    // После перехода проекта на VK не отдаём старые Telegram-записи в Tilda.
+    // Это исключает карточки, которые продолжают вести на t.me.
+    $sourceWhere = $hasSourceColumns ? " AND source = 'vk'" : " AND 1 = 0";
+
     $statement = db()->prepare(
         "SELECT id, title, body, {$sourceSelect}, published_at
          FROM news
-         WHERE status = 'published'
+         WHERE status = 'published'{$sourceWhere}
          ORDER BY published_at DESC, id DESC
          LIMIT :limit"
     );
@@ -73,12 +77,13 @@ try {
 
         $items[] = [
             'id' => $newsId,
-            'source' => (string) ($row['source'] ?? 'telegram'),
+            'source' => (string) ($row['source'] ?? 'vk'),
             'title' => $row['title'],
             'excerpt' => excerptFromBody((string) ($row['body'] ?? '')),
             'published_at' => $date->format(DATE_ATOM),
             'source_url' => $sourceUrl,
-            // Оставлено для обратной совместимости со старым блоком Tilda.
+            // Совместимость со старым Tilda-блоком: поле названо telegram_url,
+            // но для VK содержит тот же URL исходного поста VK.
             'telegram_url' => $sourceUrl,
             'media_type' => aggregateMediaType($media),
             'primary_media' => $media[0] ?? null,
