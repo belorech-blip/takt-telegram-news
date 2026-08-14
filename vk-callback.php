@@ -23,14 +23,14 @@ try {
         exit;
     }
 
-    // Подтверждение сервера должно вернуть только строку VK, без загрузки БД и конфигурации.
+    // VK требует вернуть только строку подтверждения, без лишнего вывода.
     if ($type === 'confirmation') {
         header('Content-Type: text/plain; charset=utf-8');
         echo VK_CALLBACK_CONFIRMATION;
         exit;
     }
 
-    require __DIR__ . '/src/vk.php';
+    require __DIR__ . '/src/vk-service.php';
 
     $expectedSecret = trim((string) env('VK_CALLBACK_SECRET', ''));
     $receivedSecret = trim((string) ($payload['secret'] ?? ''));
@@ -44,8 +44,26 @@ try {
     if (in_array($type, ['wall_post_new', 'wall_repost'], true)) {
         $object = $payload['object'] ?? [];
         $post = is_array($object['post'] ?? null) ? $object['post'] : (is_array($object) ? $object : []);
+
         if ($post !== []) {
-            syncVkPost($post, ltrim((string) env('VK_GROUP_DOMAIN', 'razdvatakt'), '@'));
+            if (vkServiceConfigured()) {
+                // Новый пост сохраняем тем же кодом, которым работает сверка стены.
+                syncVkServicePost($post, ltrim((string) env('VK_GROUP_DOMAIN', 'razdvatakt'), '@'));
+                // Сразу обновляем список актуальных трёх, чтобы новый пост появился без ожидания TTL.
+                try {
+                    $result = syncVkServicePosts(3);
+                    $statePath = PROJECT_ROOT . '/storage/vk-sync-runtime.json';
+                    file_put_contents($statePath, json_encode([
+                        'last_success' => time(),
+                        'result' => $result,
+                    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), LOCK_EX);
+                } catch (Throwable $syncError) {
+                    appLog('warning', 'VK callback full refresh failed', ['error' => $syncError->getMessage()]);
+                }
+            } else {
+                // До подключения сервисного ключа сохраняем то, что пришло самим Callback API.
+                syncVkPost($post, ltrim((string) env('VK_GROUP_DOMAIN', 'razdvatakt'), '@'));
+            }
         }
     }
 
