@@ -16,19 +16,17 @@ try {
         jsonResponse(['ok' => false, 'error' => 'Method not allowed'], 405);
     }
 
-    $defaultLimit = max(1, (int) env('NEWS_API_DEFAULT_LIMIT', '6'));
-    $maxLimit = max($defaultLimit, (int) env('NEWS_API_MAX_LIMIT', '24'));
-    $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : $defaultLimit;
-    $limit = max(1, min($limit, $maxLimit));
+    // По задаче блок всегда показывает ровно три самые свежие записи VK.
+    $limit = 3;
 
-    // Перед выдачей блока сверяемся с самой стеной VK. Синхронизация троттлится,
-    // поэтому обычные просмотры страницы не создают лишних запросов к VK.
+    // При каждом запуске блока сверяемся с VK, но не чаще одного раза в минуту.
+    // Callback API остаётся быстрым каналом, а эта сверка гарантирует восстановление
+    // после пропущенного события или простоя сервера.
     $syncInfo = null;
     if (vkServiceConfigured()) {
         try {
-            $syncInfo = syncVkLatestThrottled(max(3, $limit), 60);
+            $syncInfo = syncVkLatestThrottled(3, 60);
         } catch (Throwable $syncError) {
-            // Если VK временно недоступен, сайт продолжает показывать последний успешный снимок.
             appLog('warning', 'VK live sync before API response failed', ['error' => $syncError->getMessage()]);
             $syncInfo = ['configured' => true, 'error' => $syncError->getMessage()];
         }
@@ -45,6 +43,8 @@ try {
     if ($hasSourceColumns) {
         $where .= " AND source = 'vk'";
 
+        // Если есть свежий снимок стены — отдаём только эти три ID, а не просто
+        // любые три строки из базы. Это защищает от старых/битых ручных импортов.
         $latestState = readVkLatestState();
         $latestIds = array_values(array_filter(array_map('intval', (array) ($latestState['post_ids'] ?? [])), static fn(int $id): bool => $id > 0));
         $latestOwnerId = (int) ($latestState['owner_id'] ?? 0);
@@ -54,14 +54,14 @@ try {
             $bindings[':latest_owner_id'] = $latestOwnerId;
 
             $postPlaceholders = [];
-            foreach ($latestIds as $index => $postId) {
+            foreach (array_slice($latestIds, 0, 3) as $index => $postId) {
                 $placeholder = ':latest_post_' . $index;
                 $postPlaceholders[] = $placeholder;
                 $bindings[$placeholder] = $postId;
             }
             $where .= ' AND source_post_id IN (' . implode(',', $postPlaceholders) . ')';
         } else {
-            // Не показываем старые неудачные HTML-импорты без реального контента.
+            // До первой успешной service-sync показываем только нормальные VK-записи.
             $where .= " AND NOT (
                 TRIM(COALESCE(title, '')) = 'Новость компании'
                 AND TRIM(COALESCE(body, '')) = 'Новость компании'
@@ -79,13 +79,12 @@ try {
          FROM news
          WHERE {$where}
          ORDER BY published_at DESC, id DESC
-         LIMIT :limit"
+         LIMIT 3"
     );
 
     foreach ($bindings as $placeholder => $value) {
         $statement->bindValue($placeholder, $value, PDO::PARAM_INT);
     }
-    $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
     $statement->execute();
     $newsRows = $statement->fetchAll();
 
@@ -113,10 +112,25 @@ try {
         }
     }
 
+    $fallbackImage = rtrim((string) env('APP_URL', 'https://new.devtakt.ru'), '/') . '/assets/takt-news-fallback.svg';
     $items = [];
+
     foreach ($newsRows as $row) {
         $newsId = (int) $row['id'];
         $media = $mediaByNewsId[$newsId] ?? [];
+
+        // Даже если пост текстовый или VK временно не дал файл, карточка не должна
+        // превращаться в серый пустой прямоугольник.
+        if ($media === []) {
+            $media[] = [
+                'type' => 'image',
+                'url' => $fallbackImage,
+                'preview_url' => null,
+                'mime_type' => 'image/svg+xml',
+                'file_size' => null,
+            ];
+        }
+
         $date = new DateTimeImmutable(
             $row['published_at'],
             new DateTimeZone(env('APP_TIMEZONE', 'Asia/Yekaterinburg') ?? 'Asia/Yekaterinburg')
@@ -131,10 +145,10 @@ try {
             'excerpt' => excerptFromBody((string) ($row['body'] ?? '')),
             'published_at' => $date->format(DATE_ATOM),
             'source_url' => $sourceUrl,
-            // Оставляем старое поле только для совместимости с уже опубликованным Tilda-блоком.
+            // Старое имя поля оставлено только для совместимости с опубликованным Tilda-блоком.
             'telegram_url' => $sourceUrl,
             'media_type' => aggregateMediaType($media),
-            'primary_media' => $media[0] ?? null,
+            'primary_media' => $media[0],
             'media' => $media,
         ];
     }
@@ -145,7 +159,7 @@ try {
         'count' => count($items),
         'source' => 'vk',
         'live_sync_configured' => vkServiceConfigured(),
-        'items' => $items,
+        'items' => array_slice($items, 0, 3),
     ]);
 } catch (Throwable $error) {
     appLog('error', 'News API failed', ['error' => $error->getMessage()]);
